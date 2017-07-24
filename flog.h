@@ -123,7 +123,7 @@ void RedirectLog(
   } else {
     static_assert(static_cast<CharT *>(nullptr),
                   "Redirect failed."
-                  "Unconvertible type.");
+                  "Invalide stream type.");
   }
 }
 
@@ -202,7 +202,6 @@ const FLog &CurrentTick(const FLog &log) {
 
 const FLog &AscTime(const FLog &log) {
   auto result = std::time(nullptr);
-  // std::clog << "!!!!" << std::asctime(std::localtime(&result)) << std::endl;
   return log << std::asctime(std::localtime(&result));
 }
 
