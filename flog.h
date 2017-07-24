@@ -11,7 +11,6 @@
 #include <iostream>
 #include <vector>
 
-#include "call-on-exit.h"
 #include "coroutine-lock.h"
 
 namespace flog {
@@ -27,30 +26,27 @@ class BasicFLog {
   }
 
   template <class T, class... Args>
-  typename std::enable_if<
-      !std::is_convertible<T &, ostringstream_type &>::value, int>::type
-  operator()(T &&ele, const Args&... args) const {    
+  void operator()(T &&ele, const Args&... args) const {    
     static thread_local ostringstream_type format;
-    format.str("");
-    format.flags(static_part_.fmtflags_.load());
-    return this->operator()(format, ele, args...);
-  }
-
-  template <class T, class... Args>
-  typename std::enable_if<
-      std::is_convertible<T &, ostringstream_type &>::value, int>::type
-  operator()(T &format, const Args&... args) const {
     static thread_local CoroutineLock mtx;
 
     std::unique_lock<CoroutineLock> lock(mtx, std::try_to_lock);
     if (!lock.owns_lock())
-      return -1;
+      return ;
 
-    auto ret = AddToLog(format, args...);
-    if (!ret)
+    if constexpr (!std::is_convertible<T &, ostringstream_type &>::value) {
+      format.str("");
+      format.flags(static_part_.fmtflags_.load());
+
+      if (AddToLog(format, ele, args...))
+        return ;
       thread_local_part_.local_logs_ += format.str();
-
-    return ret;
+    } else {
+      if (AddToLog(ele, args...))
+        return ;
+      thread_local_part_.local_logs_ +=
+          static_cast<ostringstream_type &>(ele).str();
+    }
   }
 
   static void OutputAllLogs() {  
@@ -68,17 +64,11 @@ class BasicFLog {
   }
 
  private:
-  template <class T, class... Args>
+  template <class... Args>
   int AddToLog(ostringstream_type &format,
-               const T &ele,
                const Args&... args) const {
-    if (!(format << ele))
-      return -1;
-    return AddToLog(format, args...);
-  }
-
-  int AddToLog(ostringstream_type &format) const {
-    return 0;
+    (format << ... << args);
+    return format.good() ? 0 : -1;
   }
 
   static struct StaticPart {
@@ -115,6 +105,51 @@ BasicFLog<CharT, CharTraits>::thread_local_part_;
 
 using FLog = BasicFLog<char>;
 using WFlog = BasicFLog<wchar_t>;
+
+FLog log;
+WFlog wlog; 
+
+template <class CharT, class CharTraits>
+void RedirectLog(
+    std::unique_ptr<std::basic_ostream<CharT, CharTraits> > output) {
+  BasicFLog<CharT, CharTraits>::SetOutput(std::move(output));
+}
+
+template <class... Args>
+FLog Log(const Args&... args) {
+  FLog()(args...);
+  return FLog();
+}
+
+template <class... Args>
+FLog LogSplit(const Args&... args) {
+  (Log(args, ' '), ...);
+  return Log('\n');
+}
+
+template <class... Args>
+FLog LogSplit(uint64_t (&f)(int), const Args&... args) {
+  return LogSplit(f(0), args...);
+}
+
+template <class X>
+uint64_t CurrentTick(X) {
+  return std::chrono::steady_clock::now().time_since_epoch().count();
+}
+
+template <class CharT, class CharTraits, class X>
+BasicFLog<CharT, CharTraits> &operator<<(const BasicFLog<CharT, CharTraits> &,
+                                         X &&x) {
+  Log(x);
+}
+
+template <class CharT, class CharTraits>
+BasicFLog<CharT, CharTraits> &operator<<(
+    const BasicFLog<CharT, CharTraits> &,
+    std::basic_ostream<CharT, CharTraits> &(&x)(
+        std::basic_ostream<CharT, CharTraits> &)) {
+  Log(x);
+}
 
 } // namespace flog
 

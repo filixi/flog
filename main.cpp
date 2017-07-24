@@ -4,7 +4,6 @@
 #include "flog.h"
 
 int main() {
-  flog::FLog log;
-  log(1, 2, 3, '\n');
+  flog::LogSplit(flog::CurrentTick, 1, 2, 3) << std::endl;
   return 0;
 }
