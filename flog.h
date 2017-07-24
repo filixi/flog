@@ -2,6 +2,7 @@
 #define _FLOG_FLOG_H_
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -18,24 +19,20 @@ namespace flog {
 template <class CharT, class CharTraits = std::char_traits<CharT> >
 class BasicFLog {
  public:
-  BasicFLog() {
-    merge_local_logs_to_global_.trigger();
-    output_all_logs_.trigger();
-  }
-
   using ostringstream_type = std::basic_ostringstream<CharT, CharTraits>;
 
   static void SetOutput(
       std::unique_ptr<std::basic_ostream<CharT, CharTraits> > &&output) {
-    output_ = std::move(output);
+    static_part_.output_ = std::move(output);
   }
 
   template <class T, class... Args>
   typename std::enable_if<
       !std::is_convertible<T &, ostringstream_type &>::value, int>::type
-  operator()(T &&ele, const Args&... args) const {
-    ostringstream_type format;
-    format.flags(fmtflags_.load());
+  operator()(T &&ele, const Args&... args) const {    
+    static thread_local ostringstream_type format;
+    format.str("");
+    format.flags(static_part_.fmtflags_.load());
     return this->operator()(format, ele, args...);
   }
 
@@ -48,26 +45,26 @@ class BasicFLog {
     std::unique_lock<CoroutineLock> lock(mtx, std::try_to_lock);
     if (!lock.owns_lock())
       return -1;
-    
+
     auto ret = AddToLog(format, args...);
     if (!ret)
-      local_logs_ += format.str();
+      thread_local_part_.local_logs_ += format.str();
 
     return ret;
   }
 
   static void OutputAllLogs() {  
-    auto &output = output_ ? *output_ : std::clog;
+    auto &output = static_part_.output_ ? *static_part_.output_ : std::clog;
 
-    for (const auto &log : BasicFLog<CharT, CharTraits>::logs_)
+    for (const auto &log : static_part_.logs_)
       output << log;
   }
 
   static void MergeLocalLogsToGlobal() {
     static std::mutex mtx;
     std::lock_guard<std::mutex> guard(mtx);
-    BasicFLog<CharT, CharTraits>::logs_.push_back(
-        std::move(BasicFLog<CharT, CharTraits>::local_logs_));
+    static_part_.logs_.emplace_back(
+        std::move(thread_local_part_.local_logs_));
   }
 
  private:
@@ -84,41 +81,37 @@ class BasicFLog {
     return 0;
   }
 
-  static std::vector<std::basic_string<CharT, CharTraits> > logs_;
-  static thread_local std::basic_string<CharT, CharTraits> local_logs_;
+  static struct StaticPart {
+    ~StaticPart() {
+      OutputAllLogs();
+    }
 
-  static std::atomic<typename ostringstream_type::fmtflags> fmtflags_;
+    std::vector<std::basic_string<CharT, CharTraits> > logs_;
 
-  static std::unique_ptr<std::basic_ostream<CharT, CharTraits> > output_;
+    std::atomic<typename ostringstream_type::fmtflags>
+    fmtflags_{std::clog.flags()};
 
-  static CallOnExit output_all_logs_;
-  static thread_local CallOnExit merge_local_logs_to_global_;
+    std::unique_ptr<std::basic_ostream<CharT, CharTraits> > output_;
+
+  } static_part_;
+
+  static thread_local struct ThreadLocalPart {
+    ~ThreadLocalPart() {
+      MergeLocalLogsToGlobal();
+    }
+
+    std::basic_string<CharT, CharTraits> local_logs_;
+
+  } thread_local_part_;
 };
 
 template <class CharT, class CharTraits>
-std::vector<std::basic_string<CharT, CharTraits> >
-BasicFLog<CharT, CharTraits>::logs_;
+typename BasicFLog<CharT, CharTraits>::StaticPart
+BasicFLog<CharT, CharTraits>::static_part_;
 
 template <class CharT, class CharTraits>
-thread_local std::basic_string<CharT, CharTraits>
-BasicFLog<CharT, CharTraits>::local_logs_;
-
-template <class CharT, class CharTraits>
-std::atomic<typename BasicFLog<CharT, CharTraits>::ostringstream_type::fmtflags>
-BasicFLog<CharT, CharTraits>::fmtflags_{std::clog.flags()};
-
-template <class CharT, class CharTraits>
-std::unique_ptr<std::basic_ostream<CharT, CharTraits> >
-BasicFLog<CharT, CharTraits>::output_;
-
-template <class CharT, class CharTraits>
-CallOnExit BasicFLog<CharT, CharTraits>::output_all_logs_
-    ([]{ BasicFLog<CharT, CharTraits>::OutputAllLogs(); });
-
-template <class CharT, class CharTraits>
-thread_local CallOnExit
-BasicFLog<CharT, CharTraits>::merge_local_logs_to_global_
-    ([]{ BasicFLog<CharT, CharTraits>::MergeLocalLogsToGlobal(); });
+thread_local typename BasicFLog<CharT, CharTraits>::ThreadLocalPart
+BasicFLog<CharT, CharTraits>::thread_local_part_;
 
 using FLog = BasicFLog<char>;
 using WFlog = BasicFLog<wchar_t>;
