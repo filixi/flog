@@ -100,13 +100,22 @@ BasicFLog<CharT, CharTraits> &operator<<(const BasicFLog<CharT, CharTraits> &,
   Log<CharT, CharTraits>(std::forward<X>(x));
 }
 
-//! Inserter of BasicFLog, for supporting std::endl;
+//! Inserter of BasicFLog, for supporting std::endl.
 template <class CharT, class CharTraits>
 BasicFLog<CharT, CharTraits> &operator<<(
     const BasicFLog<CharT, CharTraits> &,
     std::basic_ostream<CharT, CharTraits> &(&x)(
         std::basic_ostream<CharT, CharTraits> &)) {
   Log<CharT, CharTraits>(x);
+}
+
+//! Inserter of BasicFlog, for flog extension.
+template <class CharT, class CharTraits>
+BasicFLog<CharT, CharTraits> &operator<<(
+    const BasicFLog<CharT, CharTraits> &,
+    const BasicFLog<CharT, CharTraits> &(&f)(
+        const BasicFLog<CharT, CharTraits> &)) {
+  f(BasicFLog<CharT, CharTraits>());
 }
 
 //! Writes logs to BasicFLog<CharT, CharTraits>, adds space as spliter.
@@ -116,16 +125,19 @@ FLog LogSplit(const Args&... args) {
   return Log<CharT, CharTraits>("\n");
 }
 
+//! LogSplit overloading for CharT, specified by the first template argument.
 template <class CharT, class... Args>
 FLog LogSplit(const Args&... args) {
   LogSplit<CharT, std::char_traits<CharT> >(args...);
 }
 
+//! LogSplit overloading for char type
 template <class... Args>
 FLog LogSplit(const Args&... args) {
   LogSplit<char, std::char_traits<char> >(args...);
 }
 
+//! LogSplit overloading for flog extension, char type.
 template <class... Args>
 FLog LogSplit(const FLog &(&f)(const FLog &), const Args&... args) {
   f(FLog()) << ' ';
@@ -133,14 +145,21 @@ FLog LogSplit(const FLog &(&f)(const FLog &), const Args&... args) {
 }
 
 //! Insert the current tick to the log.
-const FLog &CurrentTick(const FLog &log) {
+template <class CharT, class Traits>
+const BasicFLog<CharT, Traits> &CurrentTick(
+    const BasicFLog<CharT, Traits> &log) {
   return log << std::chrono::steady_clock::now().time_since_epoch().count();
 }
 
 //! Insert the current time in asc format to the log.
+/*!
+  Only char type is supported.
+*/
 const FLog &AscTime(const FLog &log) {
-  auto result = std::time(nullptr);
-  return log << std::asctime(std::localtime(&result));
+  std::time_t result = std::time(nullptr);
+  char buff[128];
+  strftime(buff, sizeof(buff), "%d-%m-%Y %H:%M:%S", std::localtime(&result));
+  return log << buff;
 }
 
 } // namespace flog

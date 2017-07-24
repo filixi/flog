@@ -159,7 +159,7 @@ BasicFLog<CharT, CharTraits>::thread_local_part_;
 using FLog = BasicFLog<char>;
 
 //! Helper type for wchar_t stream logging
-using WFlog = BasicFLog<wchar_t>;
+using WFLog = BasicFLog<wchar_t>;
 
 } // namespace flog
 
