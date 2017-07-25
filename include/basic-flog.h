@@ -94,9 +94,11 @@ class BasicFLog {
   */
   static void OutputAllLogs() {  
     auto &output = static_part_.output_ ? *static_part_.output_ : std::clog;
-
-    for (const auto &log : static_part_.logs_)
+    size_t i = 0;
+    for (const auto &log : static_part_.logs_) {
+      output << "thread " << i++ << "----------" << "\n";
       output << log;
+    }
   }
 
   //! Combined thread local logs to the main logs.
@@ -143,7 +145,6 @@ class BasicFLog {
 
   } thread_local_part_;
 };
-
 
 //! Definition of BasicFLog static non thread local member variable.
 template <class CharT, class CharTraits>

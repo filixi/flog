@@ -14,5 +14,6 @@ void foo() {
 int main() {
   flog::LogSplit(flog::AscTime, 1, 2, 3) << std::endl;
   std::thread(foo).join();
+  
   return 0;
 }

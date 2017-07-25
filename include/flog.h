@@ -77,18 +77,17 @@ template <class... Args>
 FLog Log(const Args&... args) {
   constexpr bool value =
       (detail::IsOutputible<Args, char, std::char_traits<char> >(0) && ...);
-  static_assert(value, "Non outputible value is not allowed");
+  static_assert(value, "All values must be insertible to std stream.");
   FLog()(args...);
   return FLog();
 }
-
 
 //! Writes logs to BasicFLog<CharT, CharTraits>
 template <class CharT, class CharTraits, class... Args>
 FLog Log(const Args&... args) {
   constexpr bool value =
       (detail::IsOutputible<Args, CharT, CharTraits>(0) && ...);
-  static_assert(value, "Non outputible value is not allowed");
+  static_assert(value, "All values must be insertible to std stream.");
   BasicFLog<CharT, CharTraits>()(args...);
   return BasicFLog<CharT, CharTraits>();
 }
@@ -153,7 +152,7 @@ const BasicFLog<CharT, Traits> &CurrentTick(
 
 //! Insert the current time in asc format to the log.
 /*!
-  Only char type is supported.
+  Supports only char type.
 */
 const FLog &AscTime(const FLog &log) {
   std::time_t result = std::time(nullptr);
